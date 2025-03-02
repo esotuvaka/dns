@@ -1,4 +1,18 @@
-use std::io::Error;
+use std::{error::Error, fmt::Display};
+
+#[derive(Debug)]
+pub enum BytePacketBufferError {
+    EndOfBuffer,
+    JumpLimitExceeded,
+}
+
+impl Display for BytePacketBufferError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.source())
+    }
+}
+
+impl Error for BytePacketBufferError {}
 
 pub struct BytePacketBuffer {
     pub buf: [u8; 512],
@@ -31,9 +45,9 @@ impl BytePacketBuffer {
     }
 
     /// Read a single byte and move the position one step forward
-    fn read(&mut self) -> Result<u8, Error> {
+    fn read(&mut self) -> Result<u8, BytePacketBufferError> {
         if self.pos >= 512 {
-            return Err("end of buffer".into());
+            return Err(BytePacketBufferError::EndOfBuffer);
         }
         let res = self.buf[self.pos];
         self.pos += 1;
@@ -41,29 +55,29 @@ impl BytePacketBuffer {
     }
 
     /// Get a single byte, without changing the buffer position
-    fn get(&mut self, pos: usize) -> Result<u8> {
+    fn get(&mut self, pos: usize) -> Result<u8, BytePacketBufferError> {
         if pos >= 512 {
-            return Err("end of buffer".into());
+            return Err(BytePacketBufferError::EndOfBuffer);
         }
         Ok(self.buf[pos])
     }
 
     /// Get a range of bytes
-    fn get_range(&mut self, start: usize, len: usize) -> Result<&[u8]> {
+    fn get_range(&mut self, start: usize, len: usize) -> Result<&[u8], BytePacketBufferError> {
         if start + len >= 512 {
-            return Err("end of buffer".into());
+            return Err(BytePacketBufferError::EndOfBuffer);
         }
-        Ok(self.buf[start..start + len as usize])
+        Ok(&self.buf[start..start + len as usize])
     }
 
     /// Read two bytes, stepping two steps forward
-    fn read_u16(&mut self) -> Result<u16> {
+    fn read_u16(&mut self) -> Result<u16, BytePacketBufferError> {
         let res = ((self.read()? as u16) << 8) | (self.read()? as u16);
         Ok(res)
     }
 
     /// Read four bytes, stepping four steps forward
-    fn read_u32(&mut self) -> Result<u32> {
+    fn read_u32(&mut self) -> Result<u32, BytePacketBufferError> {
         let res = ((self.read()? as u32) << 24)
             | ((self.read()? as u32) << 16)
             | ((self.read()? as u32) << 8)
@@ -75,7 +89,7 @@ impl BytePacketBuffer {
     ///
     /// It is difficult to read domain names while taking labels into consideration.
     /// Can achieve via [3]www[6]google[3]com[0] and app www.google.com to outstr.
-    fn read_qname(&mut self, outstr: &mut String) -> Result<()> {
+    fn read_qname(&mut self, outstr: &mut String) -> Result<(), BytePacketBufferError> {
         // Track position locally as jumps can occurr.
         // This allows us to move past the current qname while keeping a position
         // in the current qname.
@@ -92,7 +106,7 @@ impl BytePacketBuffer {
         loop {
             // prevent malicious packets that contain a cycle in their jump instructions
             if jumps > max_jumps {
-                return Err(format!("limit of {} jumps exceeded", max_jumps).into());
+                return Err(BytePacketBufferError::JumpLimitExceeded);
             }
             let len = self.get(pos)?; // labels start with length byte
 
@@ -100,7 +114,7 @@ impl BytePacketBuffer {
             if (len & 0xC0) == 0xC0 {
                 // update buffer position to outside of current label
                 if !jumped {
-                    self.seek(pos + 2)?;
+                    self.seek(pos + 2);
                 }
 
                 // read another byte, calc offset and jump
@@ -129,7 +143,7 @@ impl BytePacketBuffer {
         }
 
         if !jumped {
-            self.seek(pos)?;
+            self.seek(pos);
         }
         Ok(())
     }
