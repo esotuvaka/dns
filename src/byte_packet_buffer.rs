@@ -71,13 +71,13 @@ impl BytePacketBuffer {
     }
 
     /// Read two bytes, stepping two steps forward
-    fn read_u16(&mut self) -> Result<u16, BytePacketBufferError> {
+    pub fn read_u16(&mut self) -> Result<u16, BytePacketBufferError> {
         let res = ((self.read()? as u16) << 8) | (self.read()? as u16);
         Ok(res)
     }
 
     /// Read four bytes, stepping four steps forward
-    fn read_u32(&mut self) -> Result<u32, BytePacketBufferError> {
+    pub fn read_u32(&mut self) -> Result<u32, BytePacketBufferError> {
         let res = ((self.read()? as u32) << 24)
             | ((self.read()? as u32) << 16)
             | ((self.read()? as u32) << 8)
@@ -89,7 +89,7 @@ impl BytePacketBuffer {
     ///
     /// It is difficult to read domain names while taking labels into consideration.
     /// Can achieve via [3]www[6]google[3]com[0] and app www.google.com to outstr.
-    fn read_qname(&mut self, outstr: &mut String) -> Result<(), BytePacketBufferError> {
+    pub fn read_qname(&mut self, outstr: &mut String) -> Result<(), BytePacketBufferError> {
         // Track position locally as jumps can occurr.
         // This allows us to move past the current qname while keeping a position
         // in the current qname.
